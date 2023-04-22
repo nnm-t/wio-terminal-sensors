@@ -17,10 +17,38 @@
 
 namespace {
   LGFX lcd;
+
+  bool is_ble_connected = false;
+}
+
+class WioBLEServerCallbacks : public BLEServerCallbacks {
+public:
+  void onConnect(BLEServer* pServer) override
+  {
+    is_ble_connected = true;
+    BLEDevice::stopAdvertising();
+
+    lcd.fillRect(0, 0, 30, 20, 0x000000U);
+    lcd.drawString("OFF", 120, 0);
+  }
+
+  void onDisconnect(BLEServer* pServer) override
+  {
+    is_ble_connected = false;
+    BLEDevice::startAdvertising();
+
+    lcd.fillRect(0, 0, 30, 20, 0x000000U);
+    lcd.drawString("ON", 120, 0);
+  }
+};
+
+namespace {
   LGFX_Sprite sprite_meter(&lcd);
   LIS3DHTR<TwoWire> imu;
 
   StaticJsonDocument<1024> json_document;
+
+  WioBLEServerCallbacks serverCallbacks;
 
   BLECharacteristic* pCharacteristicX = nullptr;
   BLECharacteristic* pCharacteristicY = nullptr;
@@ -31,8 +59,6 @@ namespace {
   BLE2902 cccdY;
   BLE2902 cccdZ;
   BLE2902 cccdLight;
-
-  BLE2904 ble_format;
 
   BLEUUID service_uuid("d1e60e98-06ee-455a-ba1f-1fa773e903fd");
   BLEUUID characteristic_x_uuid("3b34b8bd-d4a1-41f4-8874-688cef7df2c4");
@@ -85,29 +111,24 @@ void setup() {
 
   BLEDevice::init("Wio Terminal");
   BLEServer* pServer = BLEDevice::createServer();
+  pServer->setCallbacks(&serverCallbacks);
   BLEService* pService = pServer->createService(service_uuid);
-
-  ble_format.setFormat(BLE2904::FORMAT_FLOAT32);
 
   pCharacteristicX = pService->createCharacteristic(characteristic_x_uuid, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
   pCharacteristicX->setAccessPermissions(GATT_PERM_READ);
   pCharacteristicX->addDescriptor(&cccdX);
-  pCharacteristicX->addDescriptor(&ble_format);
 
   pCharacteristicY = pService->createCharacteristic(characteristic_y_uuid, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
   pCharacteristicY->setAccessPermissions(GATT_PERM_READ);
   pCharacteristicY->addDescriptor(&cccdY);
-  pCharacteristicY->addDescriptor(&ble_format);
 
   pCharacteristicZ = pService->createCharacteristic(characteristic_z_uuid, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
   pCharacteristicZ->setAccessPermissions(GATT_PERM_READ);
   pCharacteristicZ->addDescriptor(&cccdZ);
-  pCharacteristicZ->addDescriptor(&ble_format);
 
   pCharacteristicLight = pService->createCharacteristic(characteristic_light_uuid, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
   pCharacteristicLight->setAccessPermissions(GATT_PERM_READ);
   pCharacteristicLight->addDescriptor(&cccdLight);
-  pCharacteristicLight->addDescriptor(&ble_format);
 
   pService->start();
 
@@ -117,6 +138,9 @@ void setup() {
   pAdvertising->setMinPreferred(0x06);
   pAdvertising->setMinPreferred(0x12);
   BLEDevice::startAdvertising();
+
+  lcd.drawString("Advertising", 0, 0);
+  lcd.drawString("ON", 120, 0);
 }
 
 void draw_meter(int32_t value, int32_t min, int32_t max, const char* name, int32_t x, int32_t y);

@@ -6,6 +6,11 @@
 #include <Seeed_FS.h>
 #include "SD/Seeed_SD.h"
 
+#include <rpcBLEDevice.h>
+#include <BLEServer.h>
+#include <BLE2902.h>
+#include <BLE2904.h>
+
 #include <LIS3DHTR.h>
 
 #include <ArduinoJson.h>
@@ -16,6 +21,24 @@ namespace {
   LIS3DHTR<TwoWire> imu;
 
   StaticJsonDocument<1024> json_document;
+
+  BLECharacteristic* pCharacteristicX = nullptr;
+  BLECharacteristic* pCharacteristicY = nullptr;
+  BLECharacteristic* pCharacteristicZ = nullptr;
+  BLECharacteristic* pCharacteristicLight = nullptr;
+
+  BLE2902 cccdX;
+  BLE2902 cccdY;
+  BLE2902 cccdZ;
+  BLE2902 cccdLight;
+
+  BLE2904 ble_format;
+
+  BLEUUID service_uuid("d1e60e98-06ee-455a-ba1f-1fa773e903fd");
+  BLEUUID characteristic_x_uuid("3b34b8bd-d4a1-41f4-8874-688cef7df2c4");
+  BLEUUID characteristic_y_uuid("b8640971-802e-41aa-8cc0-626fe0f740dd");
+  BLEUUID characteristic_z_uuid("ba4b6397-f53b-4623-a70e-0d4535374524");
+  BLEUUID characteristic_light_uuid("c5096544-4725-46ab-af9d-b0a669e65f70");
 }
 
 void setup() {
@@ -60,20 +83,40 @@ void setup() {
   const char* ssid = json_document["ssid"];
   const char* password = json_document["password"];
 
-  /*
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
+  BLEDevice::init("Wio Terminal");
+  BLEServer* pServer = BLEDevice::createServer();
+  BLEService* pService = pServer->createService(service_uuid);
 
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    lcd.drawString("Wi-Fi Connecting...", 0, 220);
-    delay(500);
-  }
+  ble_format.setFormat(BLE2904::FORMAT_FLOAT32);
 
-  lcd.drawString(WiFi.localIP().toString(), 0, 220);
+  pCharacteristicX = pService->createCharacteristic(characteristic_x_uuid, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  pCharacteristicX->setAccessPermissions(GATT_PERM_READ);
+  pCharacteristicX->addDescriptor(&cccdX);
+  pCharacteristicX->addDescriptor(&ble_format);
 
-  wifi_server.begin();
-  */
+  pCharacteristicY = pService->createCharacteristic(characteristic_y_uuid, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  pCharacteristicY->setAccessPermissions(GATT_PERM_READ);
+  pCharacteristicY->addDescriptor(&cccdY);
+  pCharacteristicY->addDescriptor(&ble_format);
+
+  pCharacteristicZ = pService->createCharacteristic(characteristic_z_uuid, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  pCharacteristicZ->setAccessPermissions(GATT_PERM_READ);
+  pCharacteristicZ->addDescriptor(&cccdZ);
+  pCharacteristicZ->addDescriptor(&ble_format);
+
+  pCharacteristicLight = pService->createCharacteristic(characteristic_light_uuid, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  pCharacteristicLight->setAccessPermissions(GATT_PERM_READ);
+  pCharacteristicLight->addDescriptor(&cccdLight);
+  pCharacteristicLight->addDescriptor(&ble_format);
+
+  pService->start();
+
+  BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(service_uuid);
+  pAdvertising->setScanResponse(true);
+  pAdvertising->setMinPreferred(0x06);
+  pAdvertising->setMinPreferred(0x12);
+  BLEDevice::startAdvertising();
 }
 
 void draw_meter(int32_t value, int32_t min, int32_t max, const char* name, int32_t x, int32_t y);
@@ -84,15 +127,31 @@ void loop() {
   float y = imu.getAccelerationY();
   float z = imu.getAccelerationZ();
 
+  pCharacteristicX->setValue(x);
+  pCharacteristicX->notify();
+  delay(3);
+  pCharacteristicY->setValue(y);
+  pCharacteristicY->notify();
+  delay(3);
+  pCharacteristicZ->setValue(z);
+  pCharacteristicZ->notify();
+  delay(3);
+
   draw_meter(x, -1, 1, "X", 0, 20);
   draw_meter(y, -1, 1, "Y", 160, 20);
   draw_meter(z, -1, 1, "Z", 00, 120);
 
   float light = analogRead(WIO_LIGHT);
 
+  pCharacteristicLight->setValue(light);
+  pCharacteristicLight->notify();
+  delay(3);
+
   draw_meter(light, 0, 1023, "Light", 160, 120);
 
   draw_stick();
+
+  delay(21);
 }
 
 void draw_meter_scale(int32_t x, int32_t y, int32_t radius, int32_t length, float scale)

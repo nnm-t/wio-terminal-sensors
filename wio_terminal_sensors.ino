@@ -13,6 +13,8 @@
 
 #include <LIS3DHTR.h>
 
+#include <Adafruit_NeoPixel.h>
+
 #include <ArduinoJson.h>
 
 namespace {
@@ -61,8 +63,14 @@ enum class WioKeyStatus : uint8_t
 };
 
 namespace {
+  constexpr const uint16_t led_number = 10;
+  constexpr const uint32_t neopixel_color_white = 0xFFFFFF;
+  constexpr const uint8_t neopixel_brightness_on = 0x0F;
+  constexpr const uint8_t neopixel_brightness_off = 0x00;
+
   LGFX_Sprite sprite_meter(&lcd);
   LIS3DHTR<TwoWire> imu;
+  Adafruit_NeoPixel neopixel(led_number, D0);
 
   StaticJsonDocument<1024> json_document;
 
@@ -117,6 +125,8 @@ void setup() {
   imu.setOutputDataRate(LIS3DHTR_DATARATE_25HZ);
   imu.setFullScaleRange(LIS3DHTR_RANGE_2G);
 
+  neopixel.begin();
+
   if (!SD.begin(SDCARD_SS_PIN, SDCARD_SPI))
   {
     lcd.drawString("SD open failed.", 0, 220);
@@ -168,8 +178,13 @@ void setup() {
 }
 
 void draw_meter(int32_t value, int32_t min, int32_t max, const char* name, int32_t x, int32_t y);
+
 void update_key();
 void update_stick();
+
+void set_neopixel(uint16_t led_id, uint32_t color, uint8_t brightness);
+void set_neopixel(uint16_t led_id_begin, uint16_t led_id_end, uint32_t color, uint8_t brightness);
+void set_neopixel(uint32_t color, uint8_t brightness);
 
 bool detect_stick_input(WioStickStatus detect_status)
 {
@@ -222,6 +237,16 @@ void loop() {
   delay(3);
 
   draw_meter(light, 0, 1023, "Light", 160, 120);
+
+  if (detect_key_input(WioKeyStatus::A))
+  {
+    set_neopixel(neopixel_color_white, neopixel_brightness_off);
+  }
+
+  if (detect_key_input(WioKeyStatus::B))
+  {
+    set_neopixel(neopixel_color_white, neopixel_brightness_on);
+  }
 
   delay(21);
 }
@@ -329,4 +354,24 @@ void update_stick()
 
   stick_status = WioStickStatus::None;
   was_stick_detected = false;
+}
+
+void set_neopixel(uint16_t led_id, uint32_t color, uint8_t brightness)
+{
+  neopixel.setPixelColor(led_id, color);
+  neopixel.setBrightness(brightness);
+  neopixel.show();
+}
+
+void set_neopixel(uint16_t led_id_begin, uint16_t led_id_end, uint32_t color, uint8_t brightness)
+{
+  for (uint16_t i = led_id_begin; i < led_id_end; i++)
+  {
+    set_neopixel(i, color, brightness);
+	}
+}
+
+void set_neopixel(uint32_t color, uint8_t brightness)
+{
+  set_neopixel(0, led_number, color, brightness);
 }

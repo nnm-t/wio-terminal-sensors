@@ -42,6 +42,24 @@ public:
   }
 };
 
+enum class WioStickStatus : uint8_t
+{
+  None = 0,
+  Up = 1,
+  Down = 2,
+  Left = 3,
+  Right = 4,
+  Press = 5
+};
+
+enum class WioKeyStatus : uint8_t
+{
+  None = 0,
+  A = 1,
+  B = 2,
+  C = 3
+};
+
 namespace {
   LGFX_Sprite sprite_meter(&lcd);
   LIS3DHTR<TwoWire> imu;
@@ -65,6 +83,12 @@ namespace {
   BLEUUID characteristic_y_uuid("b8640971-802e-41aa-8cc0-626fe0f740dd");
   BLEUUID characteristic_z_uuid("ba4b6397-f53b-4623-a70e-0d4535374524");
   BLEUUID characteristic_light_uuid("c5096544-4725-46ab-af9d-b0a669e65f70");
+
+  bool was_stick_detected = false;
+  WioStickStatus stick_status = WioStickStatus::None;
+
+  bool was_key_detected = false;
+  WioKeyStatus key_status = WioKeyStatus::None;
 }
 
 void setup() {
@@ -144,9 +168,35 @@ void setup() {
 }
 
 void draw_meter(int32_t value, int32_t min, int32_t max, const char* name, int32_t x, int32_t y);
-void draw_stick();
+void update_key();
+void update_stick();
+
+bool detect_stick_input(WioStickStatus detect_status)
+{
+  if (stick_status == detect_status && !was_stick_detected)
+  {
+    was_stick_detected = true;
+    return true;
+  }
+
+  return false;
+}
+
+bool detect_key_input(WioKeyStatus detect_status)
+{
+  if (key_status == detect_status && !was_key_detected)
+  {
+    was_key_detected = true;
+    return true;
+  }
+
+  return false;
+}
 
 void loop() {
+  update_key();
+  update_stick();
+
   float x = imu.getAccelerationX();
   float y = imu.getAccelerationY();
   float z = imu.getAccelerationZ();
@@ -172,8 +222,6 @@ void loop() {
   delay(3);
 
   draw_meter(light, 0, 1023, "Light", 160, 120);
-
-  draw_stick();
 
   delay(21);
 }
@@ -226,28 +274,59 @@ void draw_meter(float value, float min, float max, const char* name, int32_t x, 
   sprite_meter.pushSprite(x, y);
 }
 
-void draw_stick()
+void update_key()
 {
-  lcd.drawString("Switch=", 200, 220);
-  lcd.fillRect(270, 220, 150, 20, 0x000000U);
+  if (digitalRead(WIO_KEY_A) == LOW)
+  {
+    key_status = WioKeyStatus::A;
+  }
+
+  if (digitalRead(WIO_KEY_B) == LOW)
+  {
+    key_status = WioKeyStatus::B;
+  }
+
+  if (digitalRead(WIO_KEY_C) == LOW)
+  {
+    key_status = WioKeyStatus::C;
+  }
+  
+  key_status = WioKeyStatus::None;
+  was_key_detected = false;
+}
+
+void update_stick()
+{
   if (digitalRead(WIO_5S_UP) == LOW)
   {
-    lcd.drawString("UP", 270, 220);
+    stick_status = WioStickStatus::Up;
+    return;
   }
-  else if (digitalRead(WIO_5S_DOWN) == LOW)
+
+  if (digitalRead(WIO_5S_DOWN) == LOW)
   {
-    lcd.drawString("DOWN", 270, 220);
+    stick_status = WioStickStatus::Down;
+    return;
   }
-  else if (digitalRead(WIO_5S_LEFT) == LOW)
+
+  if (digitalRead(WIO_5S_LEFT) == LOW)
   {
-    lcd.drawString("LEFT", 270, 220);
+    stick_status = WioStickStatus::Left;
+    return;
   }
-  else if (digitalRead(WIO_5S_RIGHT) == LOW)
+
+  if (digitalRead(WIO_5S_RIGHT) == LOW)
   {
-    lcd.drawString("RIGHT", 270, 220);
+    stick_status = WioStickStatus::Right;
+    return;
   }
-  else if (digitalRead(WIO_5S_PRESS) == LOW)
+
+  if (digitalRead(WIO_5S_PRESS) == LOW)
   {
-    lcd.drawString("PRESS", 270, 220);
+    stick_status = WioStickStatus::Press;
+    return;
   }
+
+  stick_status = WioStickStatus::None;
+  was_stick_detected = false;
 }
